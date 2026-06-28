@@ -314,7 +314,7 @@
 
     <button id="battleBtn">⏱️ 3분 대결 모드 시작!</button>
     <div class="admin-row">
-      <button class="link-btn" id="adminBtn">🔧 관리자</button>
+      <button class="link-btn" id="adminBtn">🔒 비밀번호 입력</button>
       <button class="link-btn" id="rankBtn">🏆 순위 보기</button>
     </div>
 
@@ -364,7 +364,7 @@
   <!-- 관리자 -->
   <div class="overlay" id="adminOverlay">
     <div class="result-box">
-      <h2 class="blue">🔧 관리자</h2>
+      <h2 class="blue">🔒 비밀번호 입력</h2>
       <div id="adminLockView">
         <p class="lead">비밀번호를 입력하면 대결 모드가 켜져요.</p>
         <input class="modal-input" id="adminPw" type="password" placeholder="관리자 비밀번호" autocomplete="off">
@@ -702,7 +702,7 @@
       $('battleBtn').textContent = '⏱️ 3분 대결 모드 시작!';
     } else {
       $('battleBtn').disabled = true;
-      $('battleBtn').textContent = '🔒 3분 대결 (관리자 활성화 필요)';
+      $('battleBtn').textContent = '🔒 3분 대결 (비밀번호 입력 필요)';
     }
   }
   function openAdmin() {
