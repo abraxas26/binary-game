@@ -388,6 +388,10 @@
     </div>
   </div>
 
+  <!-- Firebase (다른 기기와 순위 공유) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+
 <script>
   let mode = 'd2b';        // 현재 모드
   let curDecimal = 0;      // 현재 문제의 10진수 값
@@ -404,12 +408,39 @@
 
   // ── 관리자 / 순위 설정 ──
   const ADMIN_PASSWORD = "1234";              // ★ 관리자 비밀번호 (바꾸려면 여기 수정!)
-  const LB_KEY = "binaryGameLeaderboard";     // 순위 저장 키
-  const ADMIN_KEY = "binaryGameAdmin";        // 관리자 잠금해제 상태 키
+  const ADMIN_KEY = "binaryGameAdmin";        // 관리자 잠금해제 상태 (이 기기에만 저장)
   let playerName = "";
-  let lastResultTime = 0;                      // 방금 친 기록 강조용
+  let lastResultKey = null;                    // 방금 친 기록 강조용 (Firebase 키)
 
   const $ = id => document.getElementById(id);
+
+  // ── Firebase 연결 (다른 기기와 순위 공유) ──
+  const firebaseConfig = {
+    apiKey: "AIzaSyCHSqoEGr_cSAFSIOLr0lqU1mye8cDRhZY",
+    authDomain: "yoonddong-5879b.firebaseapp.com",
+    databaseURL: "https://yoonddong-5879b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "yoonddong-5879b",
+    storageBucket: "yoonddong-5879b.firebasestorage.app",
+    messagingSenderId: "129600821288",
+    appId: "1:129600821288:web:b7e6e78f2cd6eaebaa7d1d"
+  };
+  let scoresRef = null;
+  let scoreCache = [];   // 서버에서 받아온 순위 [{key,name,score,t}]
+  try {
+    firebase.initializeApp(firebaseConfig);
+    scoresRef = firebase.database().ref('scores');
+    // 서버 데이터가 바뀔 때마다 실시간으로 자동 반영
+    scoresRef.on('value', snap => {
+      const val = snap.val() || {};
+      scoreCache = Object.keys(val).map(k => ({
+        key: k, name: val[k].name, score: val[k].score, t: val[k].t || 0
+      }));
+      if ($('overlay').classList.contains('show')) renderBoard('resultRankList', lastResultKey);
+      if ($('rankOverlay').classList.contains('show')) renderBoard('rankViewList', null);
+    });
+  } catch (e) {
+    console.warn('Firebase 연결 실패 (연습 모드는 정상 작동):', e);
+  }
 
   // 모드 버튼
   document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -617,8 +648,8 @@
     applyAdminState();   // 대결 버튼 원래 상태로 (관리자 잠금 유지)
 
     if (finished) {
-      // 점수를 순위표에 저장
-      lastResultTime = saveScore(playerName, battleCorrect);
+      // 점수를 순위표(서버)에 저장
+      lastResultKey = saveScore(playerName, battleCorrect);
 
       $('resultCount').textContent = battleCorrect + '개';
       let msg;
@@ -627,29 +658,26 @@
       else if (battleCorrect >= 10) msg = '👍 좋아요! 조금만 더!';
       else                          msg = '💪 다시 도전해봐요!';
       $('resultMsg').textContent = playerName + ' 님, 3분 동안 ' + battleCorrect + '문제 정답!\n' + msg;
-      renderBoard('resultRankList', lastResultTime);
+      renderBoard('resultRankList', lastResultKey);
       $('overlay').classList.add('show');
     }
   }
 
-  // ── 순위표(localStorage) ──
-  function loadBoard() {
-    try { return JSON.parse(localStorage.getItem(LB_KEY)) || []; }
-    catch (e) { return []; }
-  }
+  // ── 순위표 (Firebase 실시간 DB) ──
   function saveScore(name, sc) {
-    const board = loadBoard();
     const t = Date.now();
-    board.push({ name: name, score: sc, t: t });
-    localStorage.setItem(LB_KEY, JSON.stringify(board));
-    return t;
+    if (!scoresRef) return null;        // Firebase 연결 안 됐으면 저장 생략
+    const ref = scoresRef.push();       // 새 기록 칸 생성 (고유 키)
+    ref.set({ name: name, score: sc, t: t });
+    scoreCache.push({ key: ref.key, name: name, score: sc, t: t });  // 즉시 화면 반영
+    return ref.key;
   }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
-  function renderBoard(targetId, highlightT) {
+  function renderBoard(targetId, highlightKey) {
     // 점수 높은 순, 같으면 먼저 기록한 사람 우선
-    const board = loadBoard().sort((a, b) => b.score - a.score || a.t - b.t);
+    const board = scoreCache.slice().sort((a, b) => b.score - a.score || a.t - b.t);
     const el = $(targetId);
     if (board.length === 0) {
       el.innerHTML = '<div class="rank-empty">아직 기록이 없어요.<br>첫 도전자가 되어보세요! 🎯</div>';
@@ -658,7 +686,7 @@
     const medals = ['🥇', '🥈', '🥉'];
     el.innerHTML = board.slice(0, 50).map((e, i) => {
       const medal = medals[i] || (i + 1) + '위';
-      const me = (e.t === highlightT) ? ' me' : '';
+      const me = (e.key === highlightKey) ? ' me' : '';
       return '<div class="rank-item' + me + '">'
            + '<span class="medal">' + medal + '</span>'
            + '<span class="rname">' + escapeHtml(e.name) + '</span>'
@@ -737,13 +765,14 @@
   });
   $('adminResetBtn').addEventListener('click', () => {
     if (confirm('정말 모든 순위 기록을 지울까요? 되돌릴 수 없어요.')) {
-      localStorage.removeItem(LB_KEY);
+      if (scoresRef) scoresRef.remove();
+      scoreCache = [];
       alert('순위가 초기화되었어요. 🧹');
     }
   });
 
   $('rankBtn').addEventListener('click', () => {
-    renderBoard('rankViewList', -1);
+    renderBoard('rankViewList', null);
     $('rankOverlay').classList.add('show');
   });
   $('rankCloseBtn').addEventListener('click', () => $('rankOverlay').classList.remove('show'));
