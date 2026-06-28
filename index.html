@@ -367,7 +367,7 @@
       <h2 class="blue">🔒 비밀번호 입력</h2>
       <div id="adminLockView">
         <p class="lead">비밀번호를 입력하면 대결 모드가 켜져요.</p>
-        <input class="modal-input" id="adminPw" type="password" placeholder="관리자 비밀번호" autocomplete="off">
+        <input class="modal-input" id="adminPw" type="password" placeholder="비밀번호" autocomplete="off">
         <button id="adminUnlockBtn">잠금 해제 🔓</button>
       </div>
       <div id="adminPanelView" style="display:none;">
@@ -713,7 +713,7 @@
       $('adminLockView').style.display = 'block';
       $('adminPanelView').style.display = 'none';
       $('adminPw').value = '';
-      $('adminPw').placeholder = '관리자 비밀번호';
+      $('adminPw').placeholder = '비밀번호';
     }
     $('adminOverlay').classList.add('show');
   }
