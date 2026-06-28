@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이진수 변환 게임</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    color: #2d3436;
+  }
+  .card {
+    background: #fff;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    width: 100%;
+    max-width: 460px;
+    padding: 28px 26px 32px;
+  }
+  h1 {
+    font-size: 24px;
+    text-align: center;
+    color: #4834d4;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  /* 상단 상태바 */
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    flex: 1;
+    background: #f1f2f6;
+    border-radius: 14px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .stat .label { font-size: 11px; color: #888; }
+  .stat .value { font-size: 20px; font-weight: bold; color: #4834d4; }
+
+  /* 모드 선택 */
+  .modes {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 9px 4px;
+    border: 2px solid #dfe4ea;
+    background: #fff;
+    border-radius: 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    color: #555;
+  }
+  .mode-btn.active {
+    background: #4834d4;
+    border-color: #4834d4;
+    color: #fff;
+    font-weight: bold;
+  }
+
+  /* 문제 영역 */
+  .question {
+    background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+    border-radius: 18px;
+    padding: 26px 16px;
+    text-align: center;
+    margin-bottom: 18px;
+    color: #fff;
+  }
+  .question .ask { font-size: 15px; opacity: .9; margin-bottom: 8px; }
+  .question .num {
+    font-size: 52px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    font-family: 'Consolas', monospace;
+  }
+  .question .tag { font-size: 13px; opacity: .85; margin-top: 4px; }
+
+  /* 입력 */
+  .input-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  #answer {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 22px;
+    border: 2px solid #dfe4ea;
+    border-radius: 12px;
+    text-align: center;
+    font-family: 'Consolas', monospace;
+    letter-spacing: 2px;
+    outline: none;
+  }
+  #answer:focus { border-color: #4834d4; }
+  #submitBtn {
+    padding: 0 22px;
+    font-size: 16px;
+    font-weight: bold;
+    background: #00b894;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  #submitBtn:active { transform: scale(0.97); }
+
+  /* 피드백 */
+  .feedback {
+    text-align: center;
+    min-height: 48px;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 10px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .feedback.correct { background: #d4f8e8; color: #00875a; }
+  .feedback.wrong { background: #ffe0e0; color: #d63031; }
+
+  /* 도움말 / 풀이 */
+  .help {
+    margin-top: 16px;
+    background: #f8f9ff;
+    border: 1px dashed #b2bec3;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.7;
+  }
+  .help b { color: #4834d4; }
+  .toggle-help {
+    display: block;
+    margin: 12px auto 0;
+    background: none;
+    border: none;
+    color: #4834d4;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  /* 대결 버튼 */
+  #battleBtn {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  #battleBtn:active { transform: scale(0.98); }
+  #battleBtn.running {
+    background: linear-gradient(135deg, #636e72 0%, #2d3436 100%);
+  }
+  /* 결과 모달 */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .overlay.show { display: flex; }
+  .result-box {
+    background: #fff;
+    border-radius: 20px;
+    padding: 30px 26px;
+    text-align: center;
+    max-width: 360px;
+    width: 100%;
+  }
+  .result-box h2 { color: #d63031; font-size: 22px; margin-bottom: 14px; }
+  .result-box .big {
+    font-size: 56px;
+    font-weight: bold;
+    color: #4834d4;
+    margin: 6px 0;
+  }
+  .result-box .msg { color: #555; font-size: 15px; margin: 10px 0 20px; line-height:1.6; white-space: pre-line; }
+  .result-box button {
+    width: 100%;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #fff;
+    background: #00b894;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  /* 만든이 */
+  .footer {
+    text-align: center;
+    margin-top: 22px;
+    font-size: 13px;
+    color: #b2bec3;
+  }
+  .footer b { color: #6c5ce7; }
+  .bit-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-family: 'Consolas', monospace;
+    text-align: center;
+  }
+  .bit-table td {
+    border: 1px solid #dcdde1;
+    padding: 5px 2px;
+    font-size: 13px;
+  }
+  .bit-table .head { background: #ecebff; color: #4834d4; font-weight: bold; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔢 이진수 변환 게임</h1>
+    <p class="subtitle">정보 2단원 · 이진수 복습</p>
+
+    <div class="statusbar">
+      <div class="stat"><div class="label">점수</div><div class="value" id="score">0</div></div>
+      <div class="stat"><div class="label">연속정답</div><div class="value" id="streak">0</div></div>
+      <div class="stat"><div class="label">문제</div><div class="value" id="count">0</div></div>
+      <div class="stat" id="timerStat" style="display:none;">
+        <div class="label">남은시간</div><div class="value" id="timer">3:00</div>
+      </div>
+    </div>
+
+    <div class="modes">
+      <button class="mode-btn active" data-mode="d2b">10진수 → 2진수</button>
+      <button class="mode-btn" data-mode="b2d">2진수 → 10진수</button>
+      <button class="mode-btn" data-mode="mix">랜덤 혼합</button>
+    </div>
+
+    <button id="battleBtn">⏱️ 3분 대결 모드 시작!</button>
+
+    <div class="question">
+      <div class="ask" id="ask">아래 수를 이진수로 바꿔보세요</div>
+      <div class="num" id="qnum">7</div>
+      <div class="tag" id="qtag">(10진수)</div>
+    </div>
+
+    <div class="input-row">
+      <input type="text" id="answer" placeholder="정답 입력" autocomplete="off">
+      <button id="submitBtn">확인</button>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <button class="toggle-help" id="toggleHelp">💡 힌트 / 풀이 보기</button>
+    <div class="help" id="help" style="display:none;"></div>
+
+    <p class="footer">🎀 만든 사람: <b>윤정이</b> 🎀</p>
+  </div>
+
+  <!-- 대결 결과 -->
+  <div class="overlay" id="overlay">
+    <div class="result-box">
+      <h2>⏱️ 3분 대결 끝!</h2>
+      <div class="big" id="resultCount">0</div>
+      <div class="msg" id="resultMsg">문제를 맞혔어요!</div>
+      <button id="retryBtn">🔁 다시 도전!</button>
+    </div>
+  </div>
+
+<script>
+  let mode = 'd2b';        // 현재 모드
+  let curDecimal = 0;      // 현재 문제의 10진수 값
+  let curType = 'd2b';     // 이번 문제 실제 유형 (혼합 모드 대비)
+  let score = 0, streak = 0, count = 0;
+  let maxValue = 31;       // 문제로 낼 수 있는 최대값 (5비트)
+
+  // 대결 모드 상태
+  let battleOn = false;
+  let battleCorrect = 0;
+  let timeLeft = 180;      // 3분 = 180초
+  let timerId = null;
+  let prevMode = 'd2b';    // 대결 전 모드 기억
+
+  const $ = id => document.getElementById(id);
+
+  // 모드 버튼
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      mode = btn.dataset.mode;
+      newQuestion();
+    });
+  });
+
+  function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function newQuestion() {
+    // 혼합 모드면 매 문제 유형 랜덤
+    curType = (mode === 'mix') ? (Math.random() < 0.5 ? 'd2b' : 'b2d') : mode;
+    curDecimal = randInt(1, maxValue);
+
+    if (curType === 'd2b') {
+      $('ask').textContent = '아래 10진수를 이진수로 바꿔보세요';
+      $('qnum').textContent = curDecimal;
+      $('qtag').textContent = '(10진수)';
+      $('answer').placeholder = '예: 111';
+    } else {
+      $('ask').textContent = '아래 이진수를 10진수로 바꿔보세요';
+      $('qnum').textContent = curDecimal.toString(2);
+      $('qtag').textContent = '(2진수)';
+      $('answer').placeholder = '예: 7';
+    }
+    $('answer').value = '';
+    $('feedback').className = 'feedback';
+    $('feedback').textContent = '';
+    $('help').style.display = 'none';
+    $('answer').focus();
+  }
+
+  function checkAnswer() {
+    let raw = $('answer').value.trim();
+    if (raw === '') return;
+
+    let correctAns, userOK;
+
+    if (curType === 'd2b') {
+      correctAns = curDecimal.toString(2);
+      // 입력이 0과 1로만 이루어졌는지 확인
+      if (!/^[01]+$/.test(raw)) {
+        showWrong('이진수는 0과 1만 사용해요!', correctAns);
+        return;
+      }
+      // 앞의 0 제거 후 비교 (0011 == 11 인정)
+      userOK = (parseInt(raw, 2) === curDecimal);
+    } else {
+      correctAns = curDecimal.toString();
+      if (!/^[0-9]+$/.test(raw)) {
+        showWrong('10진수는 숫자만 입력하세요!', correctAns);
+        return;
+      }
+      userOK = (parseInt(raw, 10) === curDecimal);
+    }
+
+    count++;
+
+    // ── 대결 모드: 빠르게 진행, 맞힌 개수만 기록 ──
+    if (battleOn) {
+      if (userOK) {
+        battleCorrect++;
+        score += 10;
+        streak++;
+        $('feedback').className = 'feedback correct';
+        $('feedback').textContent = '⭕ 정답! (' + battleCorrect + '개)';
+      } else {
+        streak = 0;
+        $('feedback').className = 'feedback wrong';
+        $('feedback').textContent = '❌ 정답: ' + correctAns;
+      }
+      updateStats();
+      setTimeout(newQuestion, 500);  // 대결은 빠르게 다음 문제
+      return;
+    }
+
+    // ── 일반 모드 ──
+    if (userOK) {
+      score += 10 + streak * 2;   // 연속 정답 보너스
+      streak++;
+      $('feedback').className = 'feedback correct';
+      $('feedback').textContent = '⭕ 정답입니다! (+' + (10 + (streak-1)*2) + '점)';
+      updateStats();
+      setTimeout(newQuestion, 900);
+    } else {
+      showWrong('❌ 틀렸어요. 다시 생각해볼까요?', correctAns);
+    }
+  }
+
+  function showWrong(msg, correctAns) {
+    streak = 0;
+    $('feedback').className = 'feedback wrong';
+    $('feedback').textContent = msg + ' (정답: ' + correctAns + ')';
+    updateStats();
+    showHelp();             // 틀리면 풀이 자동 표시
+    $('help').style.display = 'block';
+  }
+
+  function updateStats() {
+    $('score').textContent = score;
+    $('streak').textContent = streak;
+    $('count').textContent = count;
+  }
+
+  // 풀이(자릿값 표) 만들기
+  function showHelp() {
+    const bits = curDecimal.toString(2);
+    const len = bits.length;
+    let placeRow = '<tr class="head"><td>자릿값</td>';
+    let bitRow   = '<tr><td>2진수</td>';
+    let calcRow  = '<tr><td>계산</td>';
+    let sumParts = [];
+
+    for (let i = 0; i < len; i++) {
+      const place = Math.pow(2, len - 1 - i);   // 각 자리의 값 (... 8,4,2,1)
+      const bit = bits[i];
+      placeRow += '<td>' + place + '</td>';
+      bitRow   += '<td><b>' + bit + '</b></td>';
+      if (bit === '1') {
+        calcRow += '<td>' + place + '</td>';
+        sumParts.push(place);
+      } else {
+        calcRow += '<td>0</td>';
+      }
+    }
+    placeRow += '</tr>'; bitRow += '</tr>'; calcRow += '</tr>';
+
+    let html = '';
+    if (curType === 'd2b') {
+      html += '<b>' + curDecimal + '</b> 을(를) 2로 계속 나눈 나머지를 거꾸로 읽으면 → <b>' + bits + '</b><br>';
+    } else {
+      html += '<b>' + bits + '</b> 의 각 자리값(1인 곳)을 모두 더하면 → <b>' + curDecimal + '</b><br>';
+    }
+    html += '<table class="bit-table">' + placeRow + bitRow + calcRow + '</table>';
+    html += '<div style="margin-top:8px;text-align:center;">'
+          + (sumParts.length ? sumParts.join(' + ') + ' = <b>' + curDecimal + '</b>' : '')
+          + '</div>';
+    $('help').innerHTML = html;
+  }
+
+  // 이벤트 연결
+  $('submitBtn').addEventListener('click', checkAnswer);
+  $('answer').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      // 정답 후 자동 다음문제 대기중이 아닐 때만
+      if ($('feedback').classList.contains('correct')) return;
+      checkAnswer();
+    }
+  });
+  $('toggleHelp').addEventListener('click', () => {
+    if ($('help').style.display === 'none') {
+      showHelp();
+      $('help').style.display = 'block';
+    } else {
+      $('help').style.display = 'none';
+    }
+  });
+
+  // ── 대결 모드 ──
+  function fmtTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function startBattle() {
+    battleOn = true;
+    battleCorrect = 0;
+    score = 0; streak = 0; count = 0;
+    timeLeft = 180;
+    prevMode = mode;
+    mode = 'mix';            // 대결은 혼합 출제
+
+    $('timerStat').style.display = 'block';
+    $('timer').textContent = fmtTime(timeLeft);
+    $('battleBtn').textContent = '⏹️ 대결 중단';
+    $('battleBtn').classList.add('running');
+    document.querySelectorAll('.mode-btn').forEach(b => b.disabled = true);
+
+    updateStats();
+    newQuestion();
+
+    timerId = setInterval(() => {
+      timeLeft--;
+      $('timer').textContent = fmtTime(timeLeft);
+      if (timeLeft <= 0) endBattle(true);
+    }, 1000);
+  }
+
+  function endBattle(finished) {
+    battleOn = false;
+    clearInterval(timerId);
+    timerId = null;
+
+    $('timerStat').style.display = 'none';
+    $('battleBtn').textContent = '⏱️ 3분 대결 모드 시작!';
+    $('battleBtn').classList.remove('running');
+    document.querySelectorAll('.mode-btn').forEach(b => b.disabled = false);
+    mode = prevMode;
+
+    if (finished) {
+      // 결과 화면 표시
+      $('resultCount').textContent = battleCorrect + '개';
+      let msg;
+      if (battleCorrect >= 30)      msg = '🏆 천재예요! 이진수 마스터!';
+      else if (battleCorrect >= 20) msg = '🎉 정말 잘했어요!';
+      else if (battleCorrect >= 10) msg = '👍 좋아요! 조금만 더!';
+      else                          msg = '💪 다시 도전해봐요!';
+      $('resultMsg').textContent = '3분 동안 ' + battleCorrect + '문제를 맞혔어요!\n' + msg;
+      $('overlay').classList.add('show');
+    }
+  }
+
+  $('battleBtn').addEventListener('click', () => {
+    if (battleOn) endBattle(false);   // 중단 (결과 안 띄움)
+    else startBattle();
+  });
+  $('retryBtn').addEventListener('click', () => {
+    $('overlay').classList.remove('show');
+    startBattle();
+  });
+
+  // 시작
+  newQuestion();
+  updateStats();
+</script>
+</body>
+</html>
