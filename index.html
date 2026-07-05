@@ -290,6 +290,30 @@
     font-size: 13px;
   }
   .bit-table .head { background: #ecebff; color: #4834d4; font-weight: bold; }
+  /* 시작 규칙 안내 */
+  .rule-list {
+    text-align: left;
+    margin: 6px 0 20px;
+  }
+  .rule-list .rule {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 13px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    background: #f6f5ff;
+    font-size: 14px;
+    color: #2d3436;
+  }
+  .rule-list .rule .pt {
+    margin-left: auto;
+    font-weight: bold;
+    color: #4834d4;
+    white-space: nowrap;
+  }
+  .rule-list .rule.best { background: #eafaf1; }
+  .rule-list .rule.best .pt { color: #00b894; }
 </style>
 </head>
 <body>
@@ -331,10 +355,25 @@
 
     <div class="feedback" id="feedback"></div>
 
-    <button class="toggle-help" id="toggleHelp">💡 힌트 / 풀이 보기</button>
+    <button class="toggle-help" id="toggleHelp" style="display:none;">💡 힌트 / 풀이 보기</button>
     <div class="help" id="help" style="display:none;"></div>
 
-    <p class="footer">🎀 만든 사람: <b>윤정이</b> 🎀</p>
+    <p class="footer">© copyright 보람고등학교 <b>윤정샘</b></p>
+  </div>
+
+  <!-- 시작 규칙 안내 -->
+  <div class="overlay show" id="startOverlay">
+    <div class="result-box">
+      <h2 class="blue">🔢 이진수 변환 게임</h2>
+      <p class="lead">문제를 <b>한 번에</b> 맞힐수록 점수가 높아요!<br>틀린 횟수에 따라 점수가 달라져요.</p>
+      <div class="rule-list">
+        <div class="rule best">✅ 한 번에 정답 <span class="pt">+10점 (+연속보너스)</span></div>
+        <div class="rule">1️⃣ 1번 틀리고 정답 <span class="pt">+5점</span></div>
+        <div class="rule">2️⃣ 2번 틀리고 정답 <span class="pt">+3점</span></div>
+        <div class="rule">💡 3번 틀리면 힌트! 보고 정답 <span class="pt">+1점</span></div>
+      </div>
+      <button id="startBtn">게임 시작! 🚀</button>
+    </div>
   </div>
 
   <!-- 대결 결과 -->
@@ -397,6 +436,7 @@
   let curDecimal = 0;      // 현재 문제의 10진수 값
   let curType = 'd2b';     // 이번 문제 실제 유형 (혼합 모드 대비)
   let score = 0, streak = 0, count = 0;
+  let wrongCount = 0;      // 현재 문제에서 틀린 횟수 (3번 틀리면 힌트 공개)
   let maxValue = 31;       // 문제로 낼 수 있는 최대값 (5비트)
 
   // 대결 모드 상태
@@ -413,6 +453,47 @@
   let lastResultKey = null;                    // 방금 친 기록 강조용 (Firebase 키)
 
   const $ = id => document.getElementById(id);
+
+  // ── 효과음 (Web Audio - 파일 없이 브라우저에서 바로 소리 생성) ──
+  let audioCtx = null;
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { audioCtx = null; }
+  }
+  function playTone(freq, startAt, dur, type, vol) {
+    if (!audioCtx) return;
+    const t0 = audioCtx.currentTime + startAt;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0 + dur);
+  }
+  // 연속 정답(콤보) - 콤보가 쌓일수록 음이 높아지는 상승 아르페지오
+  function playCombo(streakNow) {
+    ensureAudio();
+    const up = Math.min(streakNow, 8) * 1.5; // 콤보가 쌓일수록 반음씩 상승
+    const base = 523.25;                       // 도(C5)
+    [0, 4, 7].forEach((semi, i) => {           // 도-미-솔 화음
+      playTone(base * Math.pow(2, (semi + up) / 12), i * 0.09, 0.16, 'triangle', 0.22);
+    });
+  }
+  // 그냥 정답(콤보 아님, 틀린 뒤 맞힘) - 짧고 부드러운 알림음
+  function playCorrect() {
+    ensureAudio();
+    playTone(660, 0, 0.16, 'sine', 0.2);
+  }
+  // 오답 - 낮게 떨어지는 부저음
+  function playWrong() {
+    ensureAudio();
+    playTone(220, 0, 0.18, 'sawtooth', 0.18);
+    playTone(160, 0.13, 0.24, 'sawtooth', 0.18);
+  }
 
   // ── Firebase 연결 (다른 기기와 순위 공유) ──
   const firebaseConfig = {
@@ -476,6 +557,8 @@
     $('feedback').className = 'feedback';
     $('feedback').textContent = '';
     $('help').style.display = 'none';
+    $('toggleHelp').style.display = 'none';   // 힌트는 3번 틀려야 나옴
+    wrongCount = 0;                           // 새 문제이므로 틀린 횟수 초기화
     $('answer').focus();
   }
 
@@ -489,7 +572,7 @@
       correctAns = curDecimal.toString(2);
       // 입력이 0과 1로만 이루어졌는지 확인
       if (!/^[01]+$/.test(raw)) {
-        showWrong('이진수는 0과 1만 사용해요!', correctAns);
+        showTip('이진수는 0과 1만 사용해요!');
         return;
       }
       // 앞의 0 제거 후 비교 (0011 == 11 인정)
@@ -497,7 +580,7 @@
     } else {
       correctAns = curDecimal.toString();
       if (!/^[0-9]+$/.test(raw)) {
-        showWrong('10진수는 숫자만 입력하세요!', correctAns);
+        showTip('10진수는 숫자만 입력하세요!');
         return;
       }
       userOK = (parseInt(raw, 10) === curDecimal);
@@ -511,10 +594,12 @@
         battleCorrect++;
         score += 10;
         streak++;
+        playCombo(streak);          // 대결에서도 콤보 효과음
         $('feedback').className = 'feedback correct';
         $('feedback').textContent = '⭕ 정답! (' + battleCorrect + '개)';
       } else {
         streak = 0;
+        playWrong();                // 오답 효과음
         $('feedback').className = 'feedback wrong';
         $('feedback').textContent = '❌ 정답: ' + correctAns;
       }
@@ -525,10 +610,29 @@
 
     // ── 일반 모드 ──
     if (userOK) {
-      score += 10 + streak * 2;   // 연속 정답 보너스
-      streak++;
+      // 이번 문제에서 틀린 횟수에 따라 점수를 다르게 배정
+      let gained, label;
+      if (wrongCount === 0) {
+        gained = 10 + streak * 2;                 // 한 번에 정답! (연속 보너스 포함)
+        label  = '⭕ 한 번에 정답! (+' + gained + '점)';
+        streak++;                                  // 연속 정답은 한 번에 맞혔을 때만 이어져요
+        playCombo(streak);                         // 콤보 효과음 (연속일수록 높아짐)
+      } else if (wrongCount === 1) {
+        gained = 5;                                // 1번 틀리고 맞힘
+        label  = '⭕ 정답! (1번 틀림 · +' + gained + '점)';
+        playCorrect();
+      } else if (wrongCount === 2) {
+        gained = 3;                                // 2번 틀리고 맞힘
+        label  = '⭕ 정답! (2번 틀림 · +' + gained + '점)';
+        playCorrect();
+      } else {
+        gained = 1;                                // 3번 틀리고 힌트 본 뒤 맞힘
+        label  = '⭕ 정답! (힌트 보고 풀기 · +' + gained + '점)';
+        playCorrect();
+      }
+      score += gained;
       $('feedback').className = 'feedback correct';
-      $('feedback').textContent = '⭕ 정답입니다! (+' + (10 + (streak-1)*2) + '점)';
+      $('feedback').textContent = label;
       updateStats();
       setTimeout(newQuestion, 900);
     } else {
@@ -536,13 +640,31 @@
     }
   }
 
+  // 입력 형식 안내(오답 횟수에 포함되지 않음)
+  function showTip(msg) {
+    $('feedback').className = 'feedback wrong';
+    $('feedback').textContent = msg;
+  }
+
   function showWrong(msg, correctAns) {
     streak = 0;
-    $('feedback').className = 'feedback wrong';
-    $('feedback').textContent = msg + ' (정답: ' + correctAns + ')';
+    wrongCount++;
+    playWrong();            // 오답 효과음
     updateStats();
-    showHelp();             // 틀리면 풀이 자동 표시
-    $('help').style.display = 'block';
+    $('feedback').className = 'feedback wrong';
+
+    if (wrongCount >= 3) {
+      // 3번 틀렸을 때만 정답 + 힌트 공개
+      $('feedback').textContent = msg + ' (정답: ' + correctAns + ')';
+      $('toggleHelp').style.display = 'block';
+      showHelp();             // 풀이 자동 표시
+      $('help').style.display = 'block';
+    } else {
+      // 아직 3번 미만 → 정답/힌트 감추고 다시 도전 유도
+      const left = 3 - wrongCount;
+      $('feedback').textContent = '❌ 틀렸어요. 다시 생각해볼까요? ('
+        + left + '번 더 틀리면 힌트가 나와요)';
+    }
   }
 
   function updateStats() {
@@ -695,7 +817,18 @@
   }
 
   // ── 관리자 ──
-  function isAdmin() { return localStorage.getItem(ADMIN_KEY) === 'yes'; }
+  // localStorage 는 file:// 실행이나 개인정보 보호 모드에서 접근 시 오류가 날 수 있어요.
+  // 그래서 항상 try/catch 로 감싸서, 실패해도 게임이 멈추지 않게 합니다.
+  function isAdmin() {
+    try { return localStorage.getItem(ADMIN_KEY) === 'yes'; }
+    catch (e) { return false; }
+  }
+  function setAdmin(on) {
+    try {
+      if (on) localStorage.setItem(ADMIN_KEY, 'yes');
+      else    localStorage.removeItem(ADMIN_KEY);
+    } catch (e) { /* 저장 불가 환경 - 무시 */ }
+  }
   function applyAdminState() {
     if (isAdmin()) {
       $('battleBtn').disabled = false;
@@ -719,7 +852,7 @@
   }
   function tryUnlock() {
     if ($('adminPw').value === ADMIN_PASSWORD) {
-      localStorage.setItem(ADMIN_KEY, 'yes');
+      setAdmin(true);
       applyAdminState();
       openAdmin();   // 관리 패널로 전환
     } else {
@@ -759,7 +892,7 @@
   $('adminUnlockBtn').addEventListener('click', tryUnlock);
   $('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
   $('adminLockBtn').addEventListener('click', () => {
-    localStorage.removeItem(ADMIN_KEY);
+    setAdmin(false);
     applyAdminState();
     $('adminOverlay').classList.remove('show');
   });
@@ -777,10 +910,18 @@
   });
   $('rankCloseBtn').addEventListener('click', () => $('rankOverlay').classList.remove('show'));
 
+  // 시작 규칙 화면 → 게임 시작
+  $('startBtn').addEventListener('click', () => {
+    ensureAudio();                              // 사용자 클릭 시점에 소리 사용 허가(잠금 해제)
+    $('startOverlay').classList.remove('show');
+    $('answer').focus();
+  });
+
   // 시작
-  applyAdminState();
+  // 문제부터 먼저 생성 → 어떤 이유로 뒤 코드가 실패해도 게임은 항상 정상 출제됩니다.
   newQuestion();
   updateStats();
+  applyAdminState();
 </script>
 </body>
 </html>
