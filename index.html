@@ -414,7 +414,7 @@ const SND = {
       if(!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.gain.value = this.muted ? 0 : 0.6;
       this.master.connect(this.ctx.destination);
     }
     if(this.ctx.state==='suspended') this.ctx.resume();
@@ -439,7 +439,7 @@ const SND = {
     const beat=210;
     this.bgmTimer=setInterval(()=>{
       const n=this.BGM[this.bgmStep % this.BGM.length];
-      if(n) this.blip(n, beat/1000*0.85, 'triangle', 0.16);
+      if(n) this.blip(n, beat/1000*0.85, 'triangle', 0.22);
       this.bgmStep++;
     }, beat);
   },
@@ -447,10 +447,20 @@ const SND = {
   toggleMute(){
     this.muted=!this.muted;
     localStorage.setItem('snake_muted', this.muted?'1':'0');
-    if(this.master) this.master.gain.value=this.muted?0:0.5;
+    if(this.master) this.master.gain.value=this.muted?0:0.6;
     return this.muted;
   }
 };
+// 브라우저 자동재생 정책 대응: 페이지 첫 상호작용(클릭/터치/키)에서 오디오 잠금 해제
+(function(){
+  const unlock=()=>{
+    const ctx=SND.ensure();
+    if(ctx && ctx.state==='running'){
+      ['pointerdown','touchstart','keydown','click'].forEach(ev=>document.removeEventListener(ev,unlock,true));
+    }
+  };
+  ['pointerdown','touchstart','keydown','click'].forEach(ev=>document.addEventListener(ev,unlock,true));
+})();
 let snakeGen = 0; // 다시하기 시 이전 인스턴스가 새 BGM을 끄지 않도록 세대 관리
 
 /* ============================================================
