@@ -57,6 +57,12 @@
   .room .icon{ font-size:26px; display:block; }
   .room .rname{ display:block; font-size:13px; font-weight:bold; margin-top:4px; color:#333; }
   .room .rgame{ display:block; font-size:11px; color:var(--muted); margin-top:2px; }
+  .room .rcredit{ display:block; font-size:10px; color:#e8a100; font-weight:bold; margin-top:5px; line-height:1.5; }
+  /* 스네이크 방: 이벤트 코너처럼 노란 불빛 */
+  .room.glow{ border-color:#f0b429; background:linear-gradient(135deg,#fff8e1,#ffefba);
+    animation:roomGlow 1.8s ease-in-out infinite; }
+  .room.glow:hover{ border-color:#e8a100; transform:translateY(-3px); }
+  @keyframes roomGlow{ 0%,100%{ box-shadow:0 0 2px rgba(240,180,41,.4);} 50%{ box-shadow:0 0 22px rgba(240,180,41,.85);} }
   .footer{ text-align:center; margin-top:22px; font-size:13px; color:#b2bec3; }
   .footer b{ color:#6c5ce7; }
   .ground{ height:16px; background:#7bed9f; border:3px solid #2ed573; border-top:none;
@@ -171,6 +177,20 @@
   canvas.snake{ background:#1e1e2f; border-radius:12px; touch-action:none; image-rendering:pixelated; max-width:100%; }
   .snake-credit{ text-align:center; font-size:11px; color:var(--muted); margin-top:10px; line-height:1.6; }
   .snake-credit b{ color:var(--purple); }
+
+  /* ===== 스네이크 순위판 ===== */
+  .rank-box{ background:#f8f9ff; border:1px solid #e6e9ff; border-radius:12px; padding:10px 12px; margin:12px 0 10px; }
+  .rank-title{ font-size:13px; font-weight:bold; color:var(--purple); margin-bottom:6px; text-align:center; }
+  .rank-list{ list-style:none; max-height:170px; overflow-y:auto; }
+  .rank-list li{ display:flex; align-items:center; gap:8px; padding:5px 2px; font-size:13px; border-bottom:1px dashed #eee; }
+  .rank-list li:last-child{ border-bottom:none; }
+  .rank-list .rk{ width:26px; text-align:center; font-weight:bold; color:#f0b429; }
+  .rank-list .rn{ flex:1; text-align:left; color:#333; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-list .rs{ font-weight:bold; color:var(--purple); }
+  .rank-loading,.rank-empty{ color:#999; justify-content:center; }
+  .rank-form{ display:flex; gap:8px; margin-bottom:2px; }
+  .rank-form input{ flex:1; min-width:0; padding:10px 11px; border:2px solid #dfe4ea; border-radius:10px; font-size:14px; font-family:inherit; }
+  .rank-form input:focus{ outline:none; border-color:var(--purple); }
 </style>
 </head>
 <body>
@@ -223,7 +243,7 @@
    교과 데이터
 ============================================================ */
 const SUBJECTS = {
-  info:   {name:"정보", icon:"🐍", game:"스네이크 게임", floor:1},
+  info:   {name:"정보", icon:"🐍", game:"스네이크 게임", floor:1, glow:true, credit:"제작: 정규성 · 김기훈 · 박상훈 · 송준섭"},
   ai:     {name:"인공지능 기초", icon:"🤖", game:"강아지·고양이 분류", floor:2},
   data:   {name:"데이터 과학", icon:"📊", game:"그래프 정답 맞히기", floor:2},
   cs:     {name:"정보과학", icon:"🧪", game:"물감 정렬 퍼즐", floor:2},
@@ -256,8 +276,9 @@ function buildHub(){
     const f = +c.dataset.floor;
     Object.entries(SUBJECTS).filter(([k,v])=>v.floor===f).forEach(([key,v])=>{
       const d = document.createElement('div');
-      d.className='room';
-      d.innerHTML=`<span class="icon">${v.icon}</span><span class="rname">${v.name}</span><span class="rgame">${v.game}</span>`;
+      d.className='room'+(v.glow?' glow':'');
+      d.innerHTML=`<span class="icon">${v.icon}</span><span class="rname">${v.name}</span><span class="rgame">${v.game}</span>`+
+        (v.credit?`<span class="rcredit">${v.credit}</span>`:'');
       d.onclick=()=>openGame(key);
       c.appendChild(d);
     });
@@ -287,6 +308,88 @@ function showResult(key, title, detail, onRetry){
   ov.querySelector('#mHub').onclick=()=>{ ov.remove(); goHub(); };
   ov.querySelector('#mRetry').onclick=()=>{ ov.remove(); onRetry(); };
 }
+
+/* ============================================================
+   스네이크 순위 서버 (Google Apps Script 연동)
+   ▼▼▼ 아래 따옴표 안에 순위용 Apps Script 웹앱 주소(/exec)를 넣으세요 ▼▼▼
+   (주소를 넣기 전에는 이 기기(localStorage)에만 순위가 저장됩니다)
+============================================================ */
+const SNAKE_ENDPOINT = "";
+
+/* 스네이크 전용 결과 모달 (점수 + 순위 등록 + TOP 10) */
+function showSnakeResult(score, length, onRetry){
+  const ov=document.createElement('div'); ov.className='overlay';
+  const saved = localStorage.getItem('snake_name') || '';
+  ov.innerHTML = `<div class="modal">
+    <h2>🐍 게임 오버!</h2>
+    <p>먹이 <b>${score}</b>개 · 길이 <b>${length}</b></p>
+    <div class="promo">💡 ${PROMO.info}</div>
+    <div class="rank-box">
+      <div class="rank-title">🏆 스네이크 순위 TOP 10</div>
+      <ol class="rank-list" id="rankList"><li class="rank-loading">불러오는 중…</li></ol>
+    </div>
+    <div class="rank-form" id="rankForm">
+      <input id="rankName" maxlength="12" placeholder="이름을 넣고 순위 등록" value="${escapeHtml(saved)}">
+      <button class="btn btn-primary" id="rankSubmit">순위 등록</button>
+    </div>
+    <div class="msg" id="rankMsg"></div>
+    <div class="row mt10">
+      <button class="btn btn-ghost" id="sHub">학교로</button>
+      <button class="btn btn-primary" id="sRetry">다시하기</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#sHub').onclick=()=>{ ov.remove(); goHub(); };
+  ov.querySelector('#sRetry').onclick=()=>{ ov.remove(); onRetry(); };
+  loadSnakeRanking(ov.querySelector('#rankList'));
+  ov.querySelector('#rankSubmit').onclick=async()=>{
+    const name=ov.querySelector('#rankName').value.trim();
+    const msg=ov.querySelector('#rankMsg');
+    if(!name){ msg.className='msg bad'; msg.textContent='이름을 입력해 주세요!'; return; }
+    localStorage.setItem('snake_name', name);
+    const btn=ov.querySelector('#rankSubmit'); btn.disabled=true; btn.textContent='등록 중…';
+    await submitSnakeScore(name, score, length);
+    msg.className='msg good'; msg.textContent='순위에 등록되었어요! ✅';
+    const form=ov.querySelector('#rankForm'); if(form) form.style.display='none';
+    loadSnakeRanking(ov.querySelector('#rankList'));
+  };
+}
+
+async function submitSnakeScore(name, score, length){
+  const payload = { type:'snake', name, score, length, time:new Date().toISOString() };
+  if(!SNAKE_ENDPOINT){ saveLocalSnake(name, score); return; }
+  try{
+    await fetch(SNAKE_ENDPOINT, { method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) });
+  }catch(e){ saveLocalSnake(name, score); }
+}
+
+async function loadSnakeRanking(listEl){
+  if(!listEl) return;
+  let top=[];
+  if(SNAKE_ENDPOINT){
+    try{
+      const res=await fetch(SNAKE_ENDPOINT, { method:'GET' });
+      const data=await res.json();
+      top = (data && data.top) ? data.top : [];
+    }catch(e){ top = getLocalSnake(); }
+  } else {
+    top = getLocalSnake();
+  }
+  top = top.slice().sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,10);
+  if(!top.length){ listEl.innerHTML='<li class="rank-empty">아직 기록이 없어요. 1등에 도전! 🏁</li>'; return; }
+  const medal=i=> i<3 ? ['🥇','🥈','🥉'][i] : (i+1);
+  listEl.innerHTML = top.map((r,i)=>
+    `<li><span class="rk">${medal(i)}</span><span class="rn">${escapeHtml(r.name||'익명')}</span><span class="rs">${r.score||0}</span></li>`).join('');
+}
+
+function saveLocalSnake(name, score){
+  const a=getLocalSnake(); a.push({name, score});
+  a.sort((x,y)=>(y.score||0)-(x.score||0));
+  try{ localStorage.setItem('snake_scores', JSON.stringify(a.slice(0,50))); }catch(_){}
+}
+function getLocalSnake(){ try{ return JSON.parse(localStorage.getItem('snake_scores')||'[]'); }catch(_){ return []; } }
+
 function hud(items){
   return `<div class="hud">${items.map(i=>`<div class="pill"><div class="l">${i.l}</div><div class="v" id="${i.id}">${i.v}</div></div>`).join('')}</div>`;
 }
@@ -370,7 +473,7 @@ GAMES.info = function(key){
   }
   function gameOver(){
     alive=false; status='hit'; draw(); stop();
-    showResult(key,"🐍 게임 오버!",`먹이 ${score}개를 먹고 길이 ${snake.length}가 되었어요!`,()=>GAMES.info(key));
+    showSnakeResult(score, snake.length, ()=>GAMES.info(key));
   }
 
   function setDir(nd){
